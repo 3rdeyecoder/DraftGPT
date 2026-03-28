@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+chromadb
+sentence-transformers
+anthropic
+python-dotenv
