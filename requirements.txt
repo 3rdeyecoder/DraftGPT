@@ -1,7 +1,7 @@
 fastapi
 uvicorn[standard]
 chromadb
-sentence-transformers
+fastembed
 requests
 beautifulsoup4
 anthropic

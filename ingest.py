@@ -8,13 +8,13 @@ import json
 import os
 import sys
 import chromadb
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 from typing import Dict, List
 
 
-CHROMA_PATH = "./chroma_db"
-COLLECTION_NAME = "nfl_prospects_2026"
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+CHROMA_PATH      = "./chroma_db"
+COLLECTION_NAME  = "nfl_prospects_2026"
+EMBEDDING_MODEL  = "BAAI/bge-small-en-v1.5"   # 384-dim, ONNX — no torch required
 
 
 def prospect_to_document(p: Dict) -> str:
@@ -160,8 +160,8 @@ def ingest(prospects_path: str = "data/prospects.json") -> None:
     print(f"     • {with_reports} have scouting report text")
     print(f"     • {with_stats} have 2025 cfbstats enrichment")
 
-    print(f"\n🧠  Loading embedding model: {EMBEDDING_MODEL} ...")
-    model = SentenceTransformer(EMBEDDING_MODEL)
+    print(f"\n🧠  Loading fastembed model: {EMBEDDING_MODEL} ...")
+    embedder = TextEmbedding(EMBEDDING_MODEL)
 
     print(f"💾  Connecting to ChromaDB at {CHROMA_PATH} ...")
     client = chromadb.PersistentClient(path=CHROMA_PATH)
@@ -193,7 +193,7 @@ def ingest(prospects_path: str = "data/prospects.json") -> None:
             documents.append(doc)
             metadatas.append(build_metadata(prospect))
 
-        embeddings = [e.tolist() for e in model.encode(documents, show_progress_bar=False)]
+        embeddings = [e.tolist() for e in embedder.embed(documents)]
 
         collection.add(
             ids=ids,

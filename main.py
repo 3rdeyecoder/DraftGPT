@@ -10,23 +10,23 @@ from typing import Dict, List, Optional, Tuple
 
 import chromadb
 import anthropic
+from fastembed import TextEmbedding
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
 load_dotenv()
 
 CHROMA_PATH      = "./chroma_db"
 COLLECTION_NAME  = "nfl_prospects_2026"
-EMBEDDING_MODEL  = "all-MiniLM-L6-v2"
+EMBEDDING_MODEL  = "BAAI/bge-small-en-v1.5"
 N_RESULTS_GENERAL = 32   # top prospects returned for general queries
 MIN_RESULTS       = 10   # floor — never send fewer than this to Claude
 
 # Global state initialized at startup
-_embedder:  SentenceTransformer = None
+_embedder:  TextEmbedding        = None
 _collection                      = None
 _anthropic: anthropic.Anthropic  = None
 
@@ -171,8 +171,8 @@ async def lifespan(app: FastAPI):
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY environment variable not set.")
 
-    print("Loading embedding model...")
-    _embedder = SentenceTransformer(EMBEDDING_MODEL)
+    print("Loading fastembed model...")
+    _embedder = TextEmbedding(EMBEDDING_MODEL)
 
     print("Connecting to ChromaDB...")
     chroma = chromadb.PersistentClient(path=CHROMA_PATH)
@@ -239,14 +239,15 @@ async def chat(req: ChatRequest):
             pass  # fall through to general query if filter fails
 
     if not docs:
-        # General query — return top N_RESULTS_GENERAL by overall rank
-        all_results = _collection.get(include=["documents", "metadatas"])
-        all_paired = sorted(
-            zip(all_results["documents"], all_results["metadatas"]),
-            key=lambda x: x[1].get("rank") or 9999,
+        # General query — semantic search via fastembed
+        query_embedding = next(_embedder.query_embed(req.message)).tolist()
+        results = _collection.query(
+            query_embeddings=[query_embedding],
+            n_results=N_RESULTS_GENERAL,
+            include=["documents", "metadatas"],
         )
-        docs  = [d for d, _ in all_paired[:N_RESULTS_GENERAL]]
-        metas = [m for _, m in all_paired[:N_RESULTS_GENERAL]]
+        docs  = results["documents"][0]
+        metas = results["metadatas"][0]
 
     if not docs:
         raise HTTPException(status_code=404, detail="No prospects found in database.")
