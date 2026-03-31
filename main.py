@@ -16,7 +16,6 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from ingest import ingest
 
 load_dotenv()
 
@@ -176,17 +175,13 @@ async def lifespan(app: FastAPI):
     _embedder = TextEmbedding(EMBEDDING_MODEL)
 
     print("Connecting to ChromaDB...")
-    chroma = chromadb.PersistentClient(path=CHROMA_PATH)
-    try:
-        _collection = chroma.get_collection(COLLECTION_NAME)
-        if _collection.count() == 0:
-            raise Exception("Collection is empty")
-        print(f"Loaded collection with {_collection.count()} prospects.")
-    except Exception:
-        print("Collection not found or empty — running ingest now...")
+    if not os.path.exists(CHROMA_PATH) or not os.listdir(CHROMA_PATH):
+        print("chroma_db missing — running ingest...")
+        from ingest import ingest
         ingest()
-        _collection = chroma.get_collection(COLLECTION_NAME)
-        print(f"Ingest complete. {_collection.count()} prospects loaded.")
+    chroma = chromadb.PersistentClient(path=CHROMA_PATH)
+    _collection = chroma.get_collection(COLLECTION_NAME)
+    print(f"Loaded collection with {_collection.count()} prospects.")
 
     _anthropic = anthropic.Anthropic(api_key=api_key)
     print("NFL Scout AI is ready.\n")
